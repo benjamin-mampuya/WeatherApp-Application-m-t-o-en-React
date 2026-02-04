@@ -1,77 +1,74 @@
 import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass, faCloudSun, faWind, faTemperatureHalf, } from "@fortawesome/free-solid-svg-icons";
+import {
+  faMagnifyingGlass,
+  faCloudSun,
+  faWind,
+  faTemperatureHalf
+} from "@fortawesome/free-solid-svg-icons";
 
 type Weather = {
   city: string;
-  temp: number;
+  temperature: number;
   wind: number;
-  description: string;
+  code: number;
 };
 
-export default function App() {
+export default function WeatherApp() {
   const [city, setCity] = useState("");
   const [weather, setWeather] = useState<Weather | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  //  Convertit ville → coordonnées GPS
-  const getCoordinates = async (city: string) => {
-    const res = await fetch(
-      `https://geocoding-api.open-meteo.com/v1/search?name=${city}`
-    );
-    const data = await res.json();
-    if (!data.results || data.results.length === 0) return null;
-    return data.results[0];
-  };
-
-  //  Récupère météo
   const fetchWeather = async () => {
-    if (!city) return;
+    if (!city.trim()) return;
+
+    setLoading(true);
+    setError("");
+    setWeather(null);
 
     try {
-      setLoading(true);
-      setError("");
+      // Géocodage
+      const geoRes = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+          city
+        )}&count=1&language=fr`
+      );
+      const geoData = await geoRes.json();
 
-      const location = await getCoordinates(city);
-      if (!location) {
-        setError("Ville non trouvée");
-        setWeather(null);
-        return;
+      if (!geoData.results || geoData.results.length === 0) {
+        throw new Error("Ville introuvable");
       }
 
-      const { latitude, longitude, name } = location;
+      const { latitude, longitude, name, country } = geoData.results[0];
 
-      const res = await fetch(
+      // Météo
+      const weatherRes = await fetch(
         `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`
       );
-      const data = await res.json();
+      const weatherData = await weatherRes.json();
 
       setWeather({
-        city: name,
-        temp: data.current_weather.temperature,
-        wind: data.current_weather.windspeed,
-        description:
-          data.current_weather.weathercode < 3
-            ? "Ensoleillé"
-            : data.current_weather.weathercode < 50
-              ? "Nuageux"
-              : "Pluie",
+        city: `${name}, ${country}`,
+        temperature: weatherData.current_weather.temperature,
+        wind: weatherData.current_weather.windspeed,
+        code: weatherData.current_weather.weathercode
       });
-    } catch {
-      setError("Erreur réseau");
+    } catch (err) {
+      setError("Ville introuvable");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700">
-      <div className="bg-white/20 backdrop-blur-xl p-6 rounded-3xl shadow-2xl w-full max-w-md text-white">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-700 px-4">
+      <div className="w-full max-w-md bg-white/20 backdrop-blur-xl rounded-3xl shadow-2xl p-6 text-white">
 
+        {/* Titre */}
         <h1 className="text-2xl font-bold text-center mb-6 flex justify-center gap-2">
           <FontAwesomeIcon icon={faCloudSun} />
-          Météo App
+          Application Météo
         </h1>
 
         {/* Recherche */}
@@ -80,21 +77,30 @@ export default function App() {
             type="text"
             value={city}
             onChange={(e) => setCity(e.target.value)}
-            placeholder="Ex : Goma, Kinshasa, Paris"
+            placeholder="Ex : Paris, Goma, Kinshasa"
             className="flex-1 px-4 py-2 rounded-xl text-gray-800 outline-none focus:ring-2 focus:ring-blue-300"
           />
 
           <button
             onClick={fetchWeather}
-            className="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-xl"
+            className="bg-blue-700 hover:bg-blue-800 px-4 py-2 rounded-xl transition"
           >
             <FontAwesomeIcon icon={faMagnifyingGlass} />
           </button>
         </div>
 
-        {/* Messages */}
-        {error && <p className="text-red-200 text-center mt-4">{error}</p>}
-        {loading && <p className="text-center mt-4">Chargement...</p>}
+        {/* États */}
+        {loading && (
+          <p className="text-center mt-4 text-sm opacity-80">
+            Chargement...
+          </p>
+        )}
+
+        {error && (
+          <p className="text-center mt-4 text-red-200 text-sm">
+            {error}
+          </p>
+        )}
 
         {/* Résultat */}
         {weather && (
@@ -103,23 +109,27 @@ export default function App() {
 
             <div className="text-5xl font-bold mt-4">
               <FontAwesomeIcon icon={faTemperatureHalf} />{" "}
-              {Math.round(weather.temp)}°C
+              {Math.round(weather.temperature)}°C
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-6 text-sm">
-              <div className="bg-white/20 p-3 rounded-xl">
+              <div className="bg-white/20 rounded-xl p-3">
                 <FontAwesomeIcon icon={faWind} /> Vent
                 <p className="font-semibold">{weather.wind} km/h</p>
               </div>
 
-              <div className="bg-white/20 p-3 rounded-xl">
-                <FontAwesomeIcon icon={faCloudSun} /> Temps
-                <p className="font-semibold">{weather.description}</p>
+              <div className="bg-white/20 rounded-xl p-3">
+                <FontAwesomeIcon icon={faTemperatureHalf} /> Température
+                <p className="font-semibold">
+                  {weather.temperature} °C
+                </p>
               </div>
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
 }
+
